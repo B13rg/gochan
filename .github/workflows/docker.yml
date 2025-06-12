@@ -65,7 +65,7 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: ./docker
+          file: ./docker/Dockerfile
           build-args: |
             GOCHAN_PORT=80
             GOCHAN_SITE_HOST=127.0.0.1
