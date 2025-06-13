@@ -66,12 +66,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           file: ./docker/Dockerfile
-          build-args: |
-            GOCHAN_PORT=80
-            GOCHAN_SITE_HOST=127.0.0.1
-            GOCHAN_DB_TYPE=sqlite3
-            GOCHAN_DB_HOST=\/var\/lib\/gochan\/gochan.db
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
