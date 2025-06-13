@@ -26,4 +26,4 @@ if [ "$DB_TYPE" != "sqlite3" ]; then
     ./docker/wait-for.sh "$DB_HOST" -t 30
 fi
 
-gochan
+gochan --updatedb
