@@ -20,11 +20,9 @@ const (
 )
 
 var (
-	// ErrInvalidVersion is used when the db contains a database_version table
-	// but zero or more than one versions were found
 	ErrInvalidVersion   = errors.New("database contains database_version table but zero or more than one versions were found")
 	ErrCorruptedDB      = errors.New("database contains gochan prefixed tables but is missing versioning tables (possibly corrupted)")
-	ErrDeprecatedDB     = errors.New("database layout is deprecated, please run gochan-migration -updatedb")
+	ErrDeprecatedDB     = errors.New("database layout is deprecated")
 	ErrInvalidDBVersion = errors.New("invalid version flag returned by GetCompleteDatabaseVersion()")
 )
 
@@ -61,6 +59,9 @@ func GetCompleteDatabaseVersion() (dbVersion, dbFlag int, err error) {
 		if versionError != nil {
 			return 0, 0, versionError
 		}
+		gcutil.LogInfo().
+			Int("databaseVersion", databaseVersion).
+			Msg("Found database version")
 		if databaseVersion < DatabaseVersion {
 			return databaseVersion, DBModernButBehind, nil
 		}
@@ -76,9 +77,8 @@ func GetCompleteDatabaseVersion() (dbVersion, dbFlag int, err error) {
 	if isOldDesign {
 		return 0, DBIsPreApril, nil
 	}
-	//No old or current database versioning tables found.
+	// No old or current database versioning tables found.
 	if config.GetSystemCriticalConfig().DBprefix != "" {
-		//Check if any gochan tables exist
 		gochanTableExists, err := DoesGochanPrefixTableExist()
 		if err != nil {
 			return 0, 0, err
@@ -91,7 +91,14 @@ func GetCompleteDatabaseVersion() (dbVersion, dbFlag int, err error) {
 }
 
 // CheckAndInitializeDatabase checks the validity of the database and initialises it if it is empty
-func CheckAndInitializeDatabase(dbType string) (err error) {
+func CheckAndInitializeDatabase(dbType string, createAdmin bool) (err error) {
+	if gcdb == nil {
+		sqlConfig := config.GetSQLConfig()
+		gcdb, err = Open(&sqlConfig)
+		if err != nil {
+			return err
+		}
+	}
 	dbVersion, versionFlag, err := GetCompleteDatabaseVersion()
 	if err != nil {
 		return err
@@ -102,7 +109,7 @@ func CheckAndInitializeDatabase(dbType string) (err error) {
 	case DBModernButBehind:
 		err = ErrDeprecatedDB
 	case DBClean:
-		err = buildNewDatabase(dbType)
+		err = buildNewDatabase(dbType, createAdmin)
 	case DBUpToDate:
 		err = nil
 	case DBCorrupted:
@@ -116,14 +123,17 @@ func CheckAndInitializeDatabase(dbType string) (err error) {
 	return err
 }
 
-func buildNewDatabase(dbType string) error {
+func buildNewDatabase(dbType string, createAdmin bool) error {
 	var err error
 	if err = initDB("initdb_" + dbType + ".sql"); err != nil {
 		return err
 	}
-	if err = createDefaultAdminIfNoStaff(); err != nil {
-		return fmt.Errorf("failed creating default admin account: %w", err)
+	if createAdmin {
+		if err = createDefaultAdminIfNoStaff(); err != nil {
+			return fmt.Errorf("failed creating default admin account: %w", err)
+		}
 	}
+
 	if err = createDefaultBoardIfNoneExist(); err != nil {
 		return fmt.Errorf("failed creating default board if non already exists: %w", err)
 	}

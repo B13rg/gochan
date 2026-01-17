@@ -7,7 +7,6 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -115,14 +114,6 @@ func createSession(key, username, password string, request *http.Request, writer
 	return nil
 }
 
-func getCurrentStaff(request *http.Request) (string, error) {
-	staff, err := gcsql.GetStaffFromRequest(request)
-	if err != nil {
-		return "", err
-	}
-	return staff.Username, nil
-}
-
 // GetStaffFromRequest returns the staff making the request. If the request does not have
 // a staff cookie, it will return a staff object with rank 0.
 // Deprecated: use gcsql.GetStaffFromRequest
@@ -150,7 +141,7 @@ func InitManagePages() {
 	registerAdminPages()
 }
 
-func dashboardCallback(_ http.ResponseWriter, _ *http.Request, staff *gcsql.Staff, _ bool, _ *zerolog.Event, errEv *zerolog.Event) (any, error) {
+func dashboardCallback(_ http.ResponseWriter, _ *http.Request, staff *gcsql.Staff, _ bool, logger zerolog.Logger) (any, error) {
 	dashBuffer := bytes.NewBufferString("")
 	announcements, err := getAllAnnouncements()
 	if err != nil {
@@ -174,40 +165,14 @@ func dashboardCallback(_ http.ResponseWriter, _ *http.Request, staff *gcsql.Staf
 		"announcements": announcements,
 		"boards":        gcsql.AllBoards,
 	}, dashBuffer, "text/html"); err != nil {
-		errEv.Err(err).Str("template", "manage_dashboard.html").Caller().Send()
+		logger.Err(err).Str("template", "manage_dashboard.html").Caller().Send()
 		return "", err
 	}
 	return dashBuffer.String(), nil
 }
 
-// bordsRequestType takes the request and returns "cancel", "create", "delete",
-// "edit", or "modify" and the board's ID according to the request
-func boardsRequestType(request *http.Request) (string, int, error) {
-	var requestType string
-	var boardID int
-	var err error
-	if request.FormValue("docancel") != "" {
-		requestType = "cancel"
-	} else if request.FormValue("docreate") != "" {
-		requestType = "create"
-	} else if request.FormValue("dodelete") != "" {
-		requestType = "delete"
-	} else if request.FormValue("doedit") != "" {
-		requestType = "edit"
-	} else if request.FormValue("domodify") != "" {
-		requestType = "modify"
-	}
-	boardIDstr := request.FormValue("board")
-	if boardIDstr != "" {
-		boardID, err = strconv.Atoi(boardIDstr)
-	}
-	return requestType, boardID, err
-}
-
 func getAllStaffNopass(activeOnly bool) ([]gcsql.Staff, error) {
-	query := `SELECT
-	id, username, global_rank, added_on, last_login, is_active
-	FROM DBPREFIXstaff`
+	query := `SELECT id, username, global_rank, added_on, last_login, is_active FROM DBPREFIXstaff`
 	if activeOnly {
 		query += " WHERE is_active"
 	}
@@ -233,82 +198,4 @@ func getAllStaffNopass(activeOnly bool) ([]gcsql.Staff, error) {
 		return nil, err
 	}
 	return staff, nil
-}
-
-// getBoardDataFromForm parses the relevant form fields into the board and returns any errors for invalid string to int
-// or missing required fields. It should only be used for editing and creating boards
-func getBoardDataFromForm(board *gcsql.Board, request *http.Request) error {
-	requestType, _, _ := boardsRequestType(request)
-
-	staff, err := getCurrentStaff(request)
-	if err != nil {
-		return err
-	}
-
-	if len(request.Form["domodify"]) > 0 || len(request.Form["doedit"]) > 0 || len(request.Form["dodelete"]) > 0 {
-		if board.ID, err = getIntField("board", staff, request, 1); err != nil {
-			return err
-		}
-	}
-	if board.SectionID, err = getIntField("section", staff, request, 1); err != nil {
-		return err
-	}
-	if requestType == "create" {
-		if board.Dir, err = getStringField("dir", staff, request, 1); err != nil {
-			return err
-		}
-	}
-	if board.NavbarPosition, err = getIntField("navbarposition", staff, request, 1); err != nil {
-		return err
-	}
-	if board.Title, err = getStringField("title", staff, request, 1); err != nil {
-		return err
-	}
-	if board.Subtitle, err = getStringField("subtitle", staff, request, 1); err != nil {
-		return err
-	}
-	if board.Description, err = getStringField("description", staff, request, 1); err != nil {
-		return err
-	}
-	if board.MaxFilesize, err = getIntField("maxfilesize", staff, request, 1); err != nil {
-		return err
-	}
-	if board.MaxThreads, err = getIntField("maxthreads", staff, request, 1); err != nil {
-		return err
-	}
-	if board.DefaultStyle, err = getStringField("defaultstyle", staff, request, 1); err != nil {
-		return err
-	}
-	board.Locked = request.FormValue("locked") == "on"
-	if board.AnonymousName, err = getStringField("anonname", staff, request, 1); err != nil {
-		return err
-	}
-	if board.AnonymousName == "" {
-		board.AnonymousName = "Anonymous"
-	}
-	board.ForceAnonymous = request.FormValue("forcedanonymous") == "on"
-	if board.AutosageAfter, err = getIntField("autosageafter", staff, request, 1); err != nil {
-		return err
-	}
-	if board.AutosageAfter < 1 {
-		board.AutosageAfter = 200
-	}
-	if board.NoImagesAfter, err = getIntField("nouploadsafter", staff, request, 1); err != nil {
-		return err
-	}
-	if board.MaxMessageLength, err = getIntField("maxmessagelength", staff, request, 1); err != nil {
-		return err
-	}
-	if board.MaxMessageLength < 1 {
-		board.MaxMessageLength = 1024
-	}
-	if board.MinMessageLength, err = getIntField("minmessagelength", staff, request, 1); err != nil {
-		return err
-	}
-	board.AllowEmbeds = request.FormValue("allowembeds") == "on"
-	board.RedirectToThread = request.FormValue("redirecttothread") == "on"
-	board.RequireFile = request.FormValue("requirefile") == "on"
-	board.EnableCatalog = request.FormValue("enablecatalog") == "on"
-
-	return nil
 }

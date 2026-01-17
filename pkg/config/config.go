@@ -30,7 +30,7 @@ const (
 	DefaultSQLMaxConns           = 10
 	DefaultSQLConnMaxLifetimeMin = 3
 
-	GochanVersion = "4.2.0"
+	GochanVersion = "4.3.0"
 )
 
 var (
@@ -40,6 +40,8 @@ var (
 	boardConfigs              = map[string]BoardConfig{}
 	ErrNoMatchingEmbedHandler = errors.New("no matching handler for the embed URL")
 )
+
+type InitialSetupStatus int
 
 type GochanConfig struct {
 	SystemCriticalConfig
@@ -863,7 +865,24 @@ func (em *EmbedMatcher) HasThumbnail() bool {
 	return em.ThumbnailURLTemplate != ""
 }
 
-func WriteConfig() error {
+func GetInitialSetupStatus() InitialSetupStatus {
+	return initialSetupStatus
+}
+
+func GetDefaultConfig() *GochanConfig {
+	return defaultGochanConfig
+}
+
+func WriteConfig(path ...string) error {
+	if cfg == nil {
+		return errors.New("configuration not loaded")
+	}
+	if len(path) > 0 {
+		cfg.jsonLocation = path[0]
+	}
+	if cfg.jsonLocation == "" {
+		return errors.New("configuration file path not set")
+	}
 	return cfg.Write()
 }
 

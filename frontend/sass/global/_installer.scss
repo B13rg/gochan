@@ -1,0 +1,25 @@
+.install-container {
+	margin: 0 auto;
+	max-width: 80%;
+	padding: 1em 0;
+
+	.center-margin-50 {
+		margin: 0 auto;
+		width: 50%;
+		height: 20em;
+		display:block;
+	}
+
+	.buttons {
+		display: block;
+		text-align: center;
+		margin-top: 0.5em;
+	}
+	table {
+		margin: 0 auto;
+	}
+
+	input.path, select.path {
+		width: 100%;
+	}
+}

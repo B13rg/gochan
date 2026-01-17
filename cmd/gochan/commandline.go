@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime/debug"
 	"strings"
 
 	"github.com/gochan-org/gochan/pkg/config"
@@ -66,10 +67,22 @@ func parseCommandLine() {
 	case "version", "-v", "-version":
 		fmt.Println(config.GochanVersion)
 		return
+	case "buildinfo":
+		buildInfo, ok := debug.ReadBuildInfo()
+		if !ok {
+			fmt.Fprintln(os.Stderr, "No build info available")
+			os.Exit(1)
+		}
+		fmt.Println("Built with Go version:", buildInfo.GoVersion)
+		fmt.Println("Build information:")
+		for _, setting := range buildInfo.Settings {
+			fmt.Printf("   %s: %s\n", setting.Key, setting.Value)
+		}
 	case "help", "-h", "-help":
 		fmt.Println("Usage: gochan [command] [options]")
 		fmt.Println("Commands:")
 		fmt.Println("  version       Show the version of gochan")
+		fmt.Println("  buildinfo     Show build information")
 		fmt.Println("  help          Show this help message")
 		fmt.Println("  newstaff      Create a new staff account")
 		fmt.Println("  delstaff      Delete a staff account")
@@ -79,10 +92,10 @@ func parseCommandLine() {
 		flagSet := flag.NewFlagSet("newstaff", flag.ExitOnError)
 		flagSet.StringVar(&newstaff, "username", "", "Username for the new staff account")
 		flagSet.StringVar(&password, "password", "", "Password for the new staff account")
-		flagSet.IntVar(&rank, "rank", 0, "Rank for the new staff account")
+		flagSet.IntVar(&rank, "rank", 0, "Rank for the new staff account (1 for janitor, 2 for moderator, 3 for administrator)")
 		flagSet.Parse(os.Args[2:])
 		if newstaff == "" || rank <= 0 {
-			fmt.Fprintln(os.Stderr, "Error: -username and -rank are required")
+			fmt.Fprintln(os.Stderr, "Error: -username and -rank are required and must not be empty or 0")
 			flagSet.Usage()
 			os.Exit(1)
 		}

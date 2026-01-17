@@ -21,9 +21,7 @@ type templateRef interface {
 // InitMinifier sets up the HTML/JS/JSON minifier if enabled in gochan.json
 func InitMinifier() {
 	siteConfig := config.GetSiteConfig()
-	if !siteConfig.MinifyHTML && !siteConfig.MinifyJS {
-		return
-	}
+
 	minifier = minify.New()
 	if siteConfig.MinifyHTML {
 		minifier.AddFunc("text/html", minifyHTML.Minify)

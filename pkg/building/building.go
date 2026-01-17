@@ -149,7 +149,7 @@ func getFrontPagePosts(errEv *zerolog.Event) ([]frontPagePost, error) {
 }
 
 // BuildFrontPage builds the front page using templates/front.html
-func BuildFrontPage() error {
+func BuildFrontPage(logWhenDone ...bool) error {
 	errEv := gcutil.LogError(nil).
 		Str("template", "front")
 	defer errEv.Discard()
@@ -187,7 +187,14 @@ func BuildFrontPage() error {
 		errEv.Err(err).Caller().Send()
 		return fmt.Errorf("failed executing front page template: %w", err)
 	}
-	return frontFile.Close()
+	if err = frontFile.Close(); err != nil {
+		errEv.Err(err).Caller().Send()
+		return errors.New("failed closing front page file")
+	}
+	if len(logWhenDone) > 0 && logWhenDone[0] {
+		gcutil.LogInfo().Msg("Front page built successfully")
+	}
+	return nil
 }
 
 // BuildPageHeader is a convenience function for automatically generating the top part
@@ -281,13 +288,13 @@ func embedMedia(post *Post) (template.HTML, error) {
 
 		return template.HTML(fmt.Sprintf(
 			`<img src=%q alt="Embedded video" class="embed thumb embed-%s" style="max-width: %dpx; max-height: %dpx;" embed-width="%d" embed-height="%d">`,
-			buf.String(), filenameParts[1], templateData.ThumbWidth, templateData.ThumbHeight, boardCfg.EmbedWidth, boardCfg.EmbedHeight)), nil
+			buf.String(), filenameParts[1], templateData.ThumbWidth, templateData.ThumbHeight, boardCfg.EmbedWidth, boardCfg.EmbedHeight)), nil // skipcq: GSC-G203
 	}
 
 	if err = embedTmpl.Execute(&buf, templateData); err != nil {
 		return "", err
 	}
-	return template.HTML(buf.String()), nil
+	return template.HTML(buf.String()), nil // skipcq: GSC-G203
 }
 
 func init() {

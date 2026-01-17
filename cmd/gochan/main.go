@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/signal"
 	"syscall"
@@ -16,6 +18,7 @@ import (
 
 	"github.com/gochan-org/gochan/pkg/gcplugin"
 	"github.com/gochan-org/gochan/pkg/gcsql"
+	"github.com/gochan-org/gochan/pkg/gcsql/dbupdate"
 	_ "github.com/gochan-org/gochan/pkg/gcsql/initsql"
 	"github.com/gochan-org/gochan/pkg/gctemplates"
 	"github.com/gochan-org/gochan/pkg/posting"
@@ -42,10 +45,12 @@ func main() {
 		cleanup()
 	}()
 	err := config.InitConfig()
-	if err != nil {
-		fatalEv.Err(err).Caller().
-			Str("jsonLocation", config.JSONLocation()).
-			Msg("Unable to load configuration")
+	if errors.Is(err, fs.ErrNotExist) {
+		fatalEv.Err(err).Caller()
+		gcutil.LogArray("searchPaths", config.StandardConfigSearchPaths, fatalEv)
+		fatalEv.Msg(config.ConfigNotFoundInPathsMessage)
+	} else if err != nil {
+		fatalEv.Err(err).Caller().Send()
 	}
 
 	uid, gid := config.GetUser()
@@ -56,7 +61,7 @@ func main() {
 		GID:      gid,
 	}); err != nil {
 		fatalEv.Err(err).Caller().
-			Str("logDir", systemCritical.LogDir).
+			Str("LogDir", systemCritical.LogDir).
 			Int("uid", uid).
 			Int("gid", gid).
 			Msg("Unable to open logs")
@@ -64,9 +69,9 @@ func main() {
 	fatalEv.Discard()
 	fatalEv = gcutil.LogFatal() // reset fatalEv to use log file
 
-	testIP := os.Getenv("GC_TESTIP")
+	testIP := os.Getenv(gcutil.TestingIPEnvVar)
 	if testIP != "" {
-		gcutil.LogInfo().Str("GC_TESTIP", testIP).
+		gcutil.LogInfo().Str(gcutil.TestingIPEnvVar, testIP).
 			Msg("Custom testing IP address set from environment variable")
 	}
 
@@ -83,7 +88,11 @@ func main() {
 	if err = geoip.SetupGeoIP(siteCfg.GeoIPType, siteCfg.GeoIPOptions); err != nil {
 		fatalEv.Err(err).Caller().Msg("Unable to initialize GeoIP")
 	}
-	posting.InitCaptcha()
+	if err = posting.InitCaptcha(); err != nil {
+		fatalEv.Err(err).Caller().
+			Str("CaptchaType", siteCfg.Captcha.Type).
+			Msg("Unable to initialize CAPTCHA")
+	}
 
 	if err = gctemplates.InitTemplates(); err != nil {
 		fatalEv.Err(err).Caller().Msg("Unable to initialize templates")
@@ -108,6 +117,11 @@ func main() {
 	defer events.TriggerEvent("shutdown")
 	manage.InitManagePages()
 	go initServer()
+	gcutil.LogInfo().
+		Str("ListenAddress", systemCritical.ListenAddress).
+		Int("Port", systemCritical.Port).
+		Str("SiteHost", systemCritical.SiteHost).
+		Msg("Gochan server started")
 	<-sc
 }
 
@@ -123,14 +137,19 @@ func initDB(fatalEv *zerolog.Event, commandLine ...bool) {
 	gcutil.LogInfo().
 		Str("DBtype", systemCritical.DBtype).
 		Str("DBhost", systemCritical.DBhost).
+		Str("DBname", systemCritical.DBname).
 		Msg("Connected to database")
 
-	if err := gcsql.CheckAndInitializeDatabase(systemCritical.DBtype); err != nil {
+	err := gcsql.CheckAndInitializeDatabase(systemCritical.DBtype, true)
+	if errors.Is(err, gcsql.ErrDeprecatedDB) {
+		err = dbupdate.UpdateDatabase()
+	}
+	if err != nil {
 		cleanup()
 		if len(commandLine) > 0 && commandLine[0] {
 			fmt.Fprintln(os.Stderr, "Failed to initialize the database:", err)
 		}
-		gcutil.LogFatal().Err(err).Msg("Failed to initialize the database")
+		fatalEv.Err(err).Msg("Failed to initialize the database")
 	}
 	events.TriggerEvent("db-initialized")
 	if err := gcsql.ResetViews(); err != nil {

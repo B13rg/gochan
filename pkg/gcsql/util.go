@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -17,8 +18,6 @@ const (
 	OnlyFalse
 )
 
-const ()
-
 var (
 	dateTimeFormats = []string{
 		"2006-01-02 15:04:05",
@@ -26,7 +25,18 @@ var (
 	}
 	ErrUnsupportedDB = errors.New("unsupported SQL driver, supported drivers: " + strings.Join(sql.Drivers(), ", "))
 	ErrNotConnected  = errors.New("error connecting to database")
+	CommentRemover   = regexp.MustCompile("--.*\n?")
 )
+
+// GetDatabase returns the active database connection. If the database is not connected, it will attempt to connect to
+// the configured database
+func GetDatabase() (*GCDB, error) {
+	if gcdb == nil {
+		sqlCfg := config.GetSQLConfig()
+		return Open(&sqlCfg)
+	}
+	return gcdb, nil
+}
 
 // BooleanFilter is used for optionally limiting results to true, false, or both
 type BooleanFilter int
@@ -37,9 +47,10 @@ func (af BooleanFilter) whereClause(columnName string, and bool) string {
 	if and {
 		out = " AND "
 	}
-	if af == OnlyTrue {
+	switch af {
+	case OnlyTrue:
 		return out + columnName + " = TRUE"
-	} else if af == OnlyFalse {
+	case OnlyFalse:
 		return out + columnName + " = FALSE"
 	}
 	return ""
@@ -100,9 +111,6 @@ func BeginTx() (*sql.Tx, error) {
 
 // BeginContextTx begins a new transaction for the gochan database, using the specified context
 func BeginContextTx(ctx context.Context) (*sql.Tx, error) {
-	if gcdb == nil {
-		return nil, ErrNotConnected
-	}
 	return gcdb.BeginTx(ctx, &sql.TxOptions{
 		Isolation: 0,
 		ReadOnly:  false,
@@ -111,16 +119,10 @@ func BeginContextTx(ctx context.Context) (*sql.Tx, error) {
 
 // PrepareSQL is used for generating a prepared SQL statement formatted according to the configured database driver
 func PrepareSQL(query string, tx *sql.Tx) (*sql.Stmt, error) {
-	if gcdb == nil {
-		return nil, ErrNotConnected
-	}
 	return gcdb.PrepareSQL(query, tx)
 }
 
 func PrepareContextSQL(ctx context.Context, query string, tx *sql.Tx) (*sql.Stmt, error) {
-	if gcdb == nil {
-		return nil, ErrNotConnected
-	}
 	return gcdb.PrepareContextSQL(ctx, query, tx)
 }
 
@@ -172,9 +174,6 @@ Example:
 		intVal, stringVal)
 */
 func ExecSQL(query string, values ...any) (sql.Result, error) {
-	if gcdb == nil {
-		return nil, ErrNotConnected
-	}
 	return gcdb.ExecSQL(query, values...)
 }
 
@@ -191,9 +190,6 @@ Example:
 		intVal, stringVal)
 */
 func ExecContextSQL(ctx context.Context, tx *sql.Tx, sqlStr string, values ...any) (sql.Result, error) {
-	if gcdb == nil {
-		return nil, ErrNotConnected
-	}
 	return gcdb.ExecContextSQL(ctx, tx, sqlStr, values...)
 }
 
@@ -220,9 +216,6 @@ Example:
 		intVal, stringVal)
 */
 func ExecTxSQL(tx *sql.Tx, sqlStr string, values ...any) (sql.Result, error) {
-	if gcdb == nil {
-		return nil, ErrNotConnected
-	}
 	stmt, err := PrepareSQL(sqlStr, tx)
 	if err != nil {
 		return nil, err
@@ -249,9 +242,6 @@ Example:
 		[]any{&intVal, &stringVal})
 */
 func QueryRowSQL(query string, values, out []any) error {
-	if gcdb == nil {
-		return ErrNotConnected
-	}
 	return gcdb.QueryRowSQL(query, values, out)
 }
 
@@ -270,9 +260,6 @@ Example:
 		[]any{id}, []any{&name})
 */
 func QueryRowContextSQL(ctx context.Context, tx *sql.Tx, query string, values, out []any) error {
-	if gcdb == nil {
-		return ErrNotConnected
-	}
 	return gcdb.QueryRowContextSQL(ctx, tx, query, values, out)
 }
 
@@ -301,9 +288,6 @@ Example:
 		[]any{id}, []any{&intVal, &stringVal})
 */
 func QueryRowTxSQL(tx *sql.Tx, query string, values, out []any) error {
-	if gcdb == nil {
-		return ErrNotConnected
-	}
 	return gcdb.QueryRowTxSQL(tx, query, values, out)
 }
 
@@ -324,9 +308,6 @@ Example:
 	}
 */
 func QuerySQL(query string, a ...any) (*sql.Rows, error) {
-	if gcdb == nil {
-		return nil, ErrNotConnected
-	}
 	return gcdb.QuerySQL(query, a...)
 }
 
@@ -342,9 +323,6 @@ Example:
 	rows, err := gcsql.QueryContextSQL(ctx, nil, "SELECT name from posts where NOT is_deleted")
 */
 func QueryContextSQL(ctx context.Context, tx *sql.Tx, query string, a ...any) (*sql.Rows, error) {
-	if gcdb == nil {
-		return nil, ErrNotConnected
-	}
 	return gcdb.QueryContextSQL(ctx, tx, query, a...)
 }
 

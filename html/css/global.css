@@ -486,6 +486,12 @@ form#login-box input[type=submit] {
   margin-right: auto;
 }
 
+.section-fieldsets {
+  margin-bottom: 1em;
+  display: flex;
+  flex-wrap: wrap;
+}
+
 .lightbox {
   background: #CDCDCD;
   border: 1px solid #000;
@@ -686,6 +692,29 @@ img#banpage-image {
   margin: 4px 8px 8px 4px;
 }
 
+.install-container {
+  margin: 0 auto;
+  max-width: 80%;
+  padding: 1em 0;
+}
+.install-container .center-margin-50 {
+  margin: 0 auto;
+  width: 50%;
+  height: 20em;
+  display: block;
+}
+.install-container .buttons {
+  display: block;
+  text-align: center;
+  margin-top: 0.5em;
+}
+.install-container table {
+  margin: 0 auto;
+}
+.install-container input.path, .install-container select.path {
+  width: 100%;
+}
+
 .increase-line-height header, .increase-line-height .post, .increase-line-height .reply {
   line-height: 1.5;
 }
@@ -804,4 +833,12 @@ select.post-actions {
 
 .text-underline {
   text-decoration: underline;
+}
+
+.info-icon {
+  width: 16px;
+  height: 16px;
+  vertical-align: middle;
+  display: inline-block;
+  cursor: help;
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,13 +20,13 @@ import (
 )
 
 const (
-	// GochanVersionKeyConstant is the key value used in the version table of the database to store and receive the (database) version of base gochan
+	// gochanVersionKeyConstant is the key value used in the version table of the database to store and receive the (database) version of base gochan
 	gochanVersionKeyConstant = "gochan"
 	DatabaseVersion          = 6
 	UnsupportedSQLVersionMsg = `syntax error in SQL query, confirm you are using a supported driver and SQL server (error text: %s)`
-	mysqlConnStr             = "%s:%s@tcp(%s)/%s?parseTime=true&collation=utf8mb4_unicode_ci"
-	postgresConnStr          = "postgres://%s:%s@%s/%s?sslmode=disable"
-	sqlite3ConnStr           = "file:%s?_auth&_auth_user=%s&_auth_pass=%s&_auth_crypt=sha1"
+	MySQLConnStr             = "%s:%s@tcp(%s)/%s?parseTime=true&collation=utf8mb4_unicode_ci"
+	PostgresConnStr          = "postgres://%s:%s@%s/%s?sslmode=disable"
+	SQLite3ConnStr           = "file:%s?_auth&_auth_user=%s&_auth_pass=%s&_auth_crypt=sha1"
 )
 
 var (
@@ -74,10 +75,6 @@ func (db *GCDB) ConnectionString() string {
 	return db.connStr
 }
 
-func (db *GCDB) Connection() *sql.DB {
-	return db.db
-}
-
 func (db *GCDB) SQLDriver() string {
 	return db.driver
 }
@@ -89,6 +86,7 @@ func (db *GCDB) Close() error {
 	return nil
 }
 
+// GetBaseDB returns the underlying sql.DB database connection pool
 func (db *GCDB) GetBaseDB() *sql.DB {
 	return db.db
 }
@@ -100,6 +98,12 @@ func (db *GCDB) PrepareSQL(query string, tx *sql.Tx) (*sql.Stmt, error) {
 func (db *GCDB) PrepareContextSQL(ctx context.Context, query string, tx *sql.Tx) (*sql.Stmt, error) {
 	var prepared string
 	var err error
+	if db == nil {
+		return nil, ErrNotConnected
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if prepared, err = SetupSQLString(db.replacer.Replace(query), db); err != nil {
 		return nil, err
 	}
@@ -198,6 +202,9 @@ and transaction options. Note that it doesn't use gochan's database variables, e
 DBNAME, etc so it should be used sparingly or with gcsql.SetupSQLString
 */
 func (db *GCDB) BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error) {
+	if db == nil {
+		return nil, ErrNotConnected
+	}
 	return db.db.BeginTx(ctx, opts)
 }
 
@@ -349,18 +356,20 @@ func setupDBConn(cfg *config.SQLConfig) (db *GCDB, err error) {
 	replacerArr := []string{
 		"DBNAME", cfg.DBname,
 		"DBPREFIX", cfg.DBprefix,
+		"DBVERSION", strconv.Itoa(DatabaseVersion),
 		"\n", " ",
 	}
 	switch cfg.DBtype {
 	case "mysql":
-		db.connStr = fmt.Sprintf(mysqlConnStr, cfg.DBusername, cfg.DBpassword, cfg.DBhost, cfg.DBname)
+		db.connStr = fmt.Sprintf(MySQLConnStr, cfg.DBusername, cfg.DBpassword, cfg.DBhost, cfg.DBname)
 		replacerArr = append(replacerArr, mysqlReplacerArr...)
-		mysql.SetLogger(gcutil.Logger())
+		l := gcutil.Logger()
+		mysql.SetLogger(&l)
 	case "postgres":
-		db.connStr = fmt.Sprintf(postgresConnStr, cfg.DBusername, cfg.DBpassword, cfg.DBhost, cfg.DBname)
+		db.connStr = fmt.Sprintf(PostgresConnStr, cfg.DBusername, cfg.DBpassword, cfg.DBhost, cfg.DBname)
 		replacerArr = append(replacerArr, postgresReplacerArr...)
 	case "sqlite3":
-		db.connStr = fmt.Sprintf(sqlite3ConnStr, cfg.DBhost, cfg.DBusername, cfg.DBpassword)
+		db.connStr = fmt.Sprintf(SQLite3ConnStr, cfg.DBhost, cfg.DBusername, cfg.DBpassword)
 		replacerArr = append(replacerArr, sqlite3ReplacerArr...)
 	default:
 		return nil, ErrUnsupportedDB
